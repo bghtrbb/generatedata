@@ -96,7 +96,6 @@ require([
 	function submit(e) {
 		var currentStep = parseInt($(e.target).closest(".gdInstallSection").attr("id").replace(/page/, ""), 10);
 		$(".gdError").hide();
-		var errors = [];
 
 		if (currentStep === 1) {
 			_checkDatabaseInfo();
@@ -347,14 +346,11 @@ require([
 
 	function _installPlugins() {
 		if (!_pluginsInstalled) {
-			utils.startProcessing();
-			$("#gdInstallPluginsBtn").hide();
 			pluginManager.installPlugins({
 				errorHandler: installError,
-				onCompleteHandler: function() {
-					$("#gdInstallPluginsBtn").html(_L.continue_rightarrow).fadeIn();
+				onCompleteHandler: function () {
 					_pluginsInstalled = true;
-					utils.stopProcessing();
+					gotoNextStep();
 				}
 			});
 		} else {

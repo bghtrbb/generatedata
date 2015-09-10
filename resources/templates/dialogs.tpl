@@ -83,7 +83,7 @@
 
 		<div id="gdMainDialogTab2Content" class="hidden">
 			<p id="gdNoAccountDataSets" class="hidden">{$L.no_saved_data_sets}</p>
-			<table width="100%" cellpadding="0" cellspacing="1" id="gdAccountDataSets" class="highlightTableRows">
+			<table width="100%" cellpadding="0" cellspacing="1" id="gdAccountDataSets" class="gdDialogTable highlightTableRows">
 				<thead>
 					<tr>
 						<th class="leftAligned">{$L.data_set_name}</th>
@@ -91,12 +91,38 @@
 						<th class="leftAligned">{$L.last_modified}</th>
 						<th align="center">{$L.public_q}</th>
 						<th align="center">{$L.rows_generated}</th>
+                        <th width="80" align="center">{$L.history}</th>
 						<th width="60" align="center">{$L.load}</th>
 						<th width="24" align="center" class="gdDataSetCheckRowCell"><input type="checkbox" id="gdSelectAllDataSets" /></th>
 					</tr>
 				</thead>
 				<tbody></tbody>
-			</table> 
+			</table>
+
+            <div id="gdConfigurationHistory" class="hidden">
+                <p id="gdConfigurationHistoryLoading">
+                    Loading configuration history...
+                </p>
+                <div id="gdConfigurationHistoryTable">
+                    <p id="gdConfigurationHistoryHeader">
+                        <span style="float:right">History is limited to <b id="gdConfigurationHistorySize"></b> rows</span>
+                        <a href="#">&laquo; back to Data Sets</a>
+                    </p>
+
+                    <table width="100%" cellpadding="0" cellspacing="1" class="gdDialogTable highlightTableRows">
+                        <thead>
+                        <tr>
+                            <th class="leftAligned" width="50">ID</th>
+                            <th class="leftAligned">{$L.data_set_name}</th>
+                            <th class="leftAligned">{$L.last_modified}</th>
+                            <th width="80" align="center">{$L.load}</th>
+                        </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+            </div>
 		</div>
 		<div id="gdMainDialogTab3Content" class="hidden">
 			<div id="gdDataSetHelpNav">

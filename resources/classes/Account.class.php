@@ -23,7 +23,11 @@ class Account {
 	private $firstName;
 	private $lastName;
 	private $email;
+    private $selectedDataTypes;
+    private $selectedExportTypes;
+    private $selectedCountries;
 	private $configurations;
+    private $numRowsGenerated = 0;
 
 
 	/**
@@ -37,7 +41,7 @@ class Account {
 	}
 
 	/**
-	 * Called by the constructor and any time the user updates his user account. 
+	 * Called by the constructor and any time the user updates his/her user account.
 	 */
 	private function getCurrentUser($accountID) {
 		if ($accountID == "anonymousAdmin") {
@@ -66,7 +70,10 @@ class Account {
 				$this->firstName = $accountInfo["first_name"];
 				$this->lastName = $accountInfo["last_name"];
 				$this->email = $accountInfo["email"];
-				$this->getConfigurations();
+                $this->selectedDataTypes = explode(",", $accountInfo["selected_data_types"]);
+                $this->selectedExportTypes = explode(",", $accountInfo["selected_export_types"]);
+                $this->selectedCountries = explode(",", $accountInfo["selected_countries"]);
+                $this->getConfigurations();
 				$this->numRowsGenerated = $accountInfo["num_rows_generated"];
 			}
 		}
@@ -193,22 +200,91 @@ class Account {
 		}
 	}
 
+    public static function updateSelectedPlugins($accountID, $dataTypes, $exportTypes, $countries) {
+        $prefix = Core::getDbTablePrefix();
+        $dbLink = Core::$db->getDBLink();
+
+        $dataTypes   = mysqli_real_escape_string($dbLink, implode(",", $dataTypes));
+        $exportTypes = mysqli_real_escape_string($dbLink, implode(",", $exportTypes));
+        $countries   = mysqli_real_escape_string($dbLink, implode(",", $countries));
+
+        return Core::$db->query("
+			UPDATE {$prefix}user_accounts
+			SET selected_data_types = '$dataTypes',
+				selected_export_types = '$exportTypes',
+				selected_countries = '$countries'
+			WHERE account_id = $accountID
+		");
+    }
 
 	public function getAccount() {
 		return array(
-			"isAnonymousAdmin" => $this->isAnonymousAdmin,
-			"accountID"        => $this->accountID,
-			"accountType"      => $this->accountType,
-			"dateCreated"      => $this->dateCreated,
-			"lastUpdated"      => $this->lastUpdated,
-			"dateExpires"      => $this->dateExpires,
-			"firstName"        => $this->firstName,
-			"lastName"         => $this->lastName,
-			"email"            => $this->email,
-			"configurations"   => $this->configurations,
-			"numRowsGenerated" => $this->numRowsGenerated
+			"isAnonymousAdmin"    => $this->isAnonymousAdmin,
+			"accountID"           => $this->accountID,
+			"accountType"         => $this->accountType,
+			"dateCreated"         => $this->dateCreated,
+			"lastUpdated"         => $this->lastUpdated,
+			"dateExpires"         => $this->dateExpires,
+			"firstName"           => $this->firstName,
+			"lastName"            => $this->lastName,
+			"email"               => $this->email,
+			"configurations"      => $this->configurations,
+            "selectedDataTypes"   => $this->selectedDataTypes,
+            "selectedExportTypes" => $this->selectedExportTypes,
+            "selectedCountries"   => $this->selectedCountries,
+			"numRowsGenerated"    => $this->numRowsGenerated
 		);
 	}
+
+    /**
+     * Returns the subset of Data Type plugins selected by this user.
+     */
+    public function getDataTypePlugins() {
+        $groupedDataTypes = Core::$dataTypePlugins;
+
+        $whitelistedGroupedDataTypes = array();
+        while (list($group_name, $dataTypes) = each($groupedDataTypes)) {
+            $matched = array();
+            foreach ($dataTypes as $dataType) {
+                if (in_array($dataType->getFolder(), $this->selectedDataTypes)) {
+                    $matched[] = $dataType;
+                }
+            }
+            if (!empty($matched)) {
+                $whitelistedGroupedDataTypes[$group_name] = $matched;
+            }
+        }
+        return $whitelistedGroupedDataTypes;
+    }
+
+    /**
+     * Returns the subset of Export Type plugins selected by this user.
+     */
+    public function getExportTypePlugins() {
+        $exportTypes = Core::$exportTypePlugins;
+
+        $whitelistedExportTypes = array();
+        foreach ($exportTypes as $exportType) {
+            if (in_array($exportType->getFolder(), $this->selectedExportTypes)) {
+                $whitelistedExportTypes[] = $exportType;
+            }
+        }
+        return $whitelistedExportTypes;
+    }
+
+    /**
+     * Returns the subset of Country plugins selected by this user.
+     */
+    public function getCountryPlugins() {
+        $countryPlugins = Core::$countryPlugins;
+        $whitelistedCountryPlugins = array();
+        foreach ($countryPlugins as $countryPlugin) {
+            if (in_array($countryPlugin->getFolder(), $this->selectedCountries)) {
+                $whitelistedCountryPlugins[] = $countryPlugin;
+            }
+        }
+        return $whitelistedCountryPlugins;
+    }
 
 	public function isAnonymousAdmin() {
 		return $this->isAnonymousAdmin;
@@ -258,15 +334,30 @@ class Account {
 		);
 	}
 
+    /**
+     * As of 3.2.1, configurations are now backed up for every time the user clicks save. This method continues
+     * to work the same, but only returns the most recent configuration version from the history table.
+     */
 	public function getConfigurations() {
 		$accountID = $this->accountID;
 		$prefix   = Core::getDbTablePrefix();		
-		$response = Core::$db->query("
-			SELECT *, unix_timestamp(date_created) as date_created_unix, unix_timestamp(last_updated) as last_updated_unix
-			FROM   {$prefix}configurations
-			WHERE  account_id = $accountID
-			ORDER BY last_updated DESC
-		");
+
+        $response = Core::$db->query("
+            SELECT c.*, ch.*, unix_timestamp(c.date_created) as date_created_unix, unix_timestamp(ch.last_updated) as last_updated_unix
+            FROM {$prefix}configurations c
+                LEFT JOIN {$prefix}configuration_history ch
+                    ON ch.configuration_id = c.configuration_id
+                    AND ch.history_id =
+                        (
+                            SELECT history_id
+                            FROM {$prefix}configuration_history ch2
+                            WHERE ch2.configuration_id = c.configuration_id
+                            ORDER BY history_id DESC
+                            LIMIT 1
+                        )
+                    AND account_id = $accountID
+            ORDER BY ch.last_updated DESC
+        ");
 
 		if ($response["success"]) {
 			$data = array();
@@ -278,6 +369,39 @@ class Account {
 			// TODO
 		}
 	}
+
+    public function getDataSetHistory($configurationID) {
+        $accountID = $this->accountID;
+        $prefix   = Core::getDbTablePrefix();
+
+        $response = Core::$db->query("
+            SELECT  ch.*, unix_timestamp(ch.last_updated) as last_updated_unix
+            FROM    {$prefix}configuration_history ch, {$prefix}configurations c
+            WHERE c.account_id = $accountID AND
+                  c.configuration_id = $configurationID AND
+                  c.configuration_id = ch.configuration_id
+            ORDER BY ch.last_updated DESC
+        ");
+
+        if ($response["success"]) {
+            $data = array(
+                "maxResults" => Core::getMaxDataSetHistorySize(),
+                "results" => array()
+            );
+            while ($row = mysqli_fetch_assoc($response["results"])) {
+                $data["results"][] = $row;
+            }
+            return array(
+                "success"   => true,
+                "message"   => $data
+            );
+        } else {
+            return array(
+                "success"   => false,
+                "message"   => $response["errorMessage"]
+            );
+        }
+    }
 
 
 	public function deleteConfigurations($configurationIDs) {
@@ -300,8 +424,12 @@ class Account {
 			WHERE account_id = {$accountID} AND
 				  configuration_id IN ($configIDStr)
 		");
+        $response2 = Core::$db->query("
+			DELETE FROM {$prefix}configuration_history
+			WHERE configuration_id IN ($configIDStr)
+		");
 
-		if ($response["success"]) {
+		if ($response["success"] && $response2["success"]) {
 			return array(
 				"success" => true,
 				"message" => $cleanedConfigurationIDs
@@ -334,48 +462,41 @@ class Account {
 		$prefix = Core::getDbTablePrefix();
 		$accountID = $this->accountID;
 
+        // if this is a new configuration, create the main record
 		if ($configurationID == null) {
-			$response = Core::$db->query("
-				INSERT INTO {$prefix}configurations (status, date_created, last_updated, account_id, configuration_name, content)
-				VALUES ('private', '$now', '$now', $accountID, '" . $configurationName . "', '" . $content . "')
+            $response = Core::$db->query("
+				INSERT INTO {$prefix}configurations (status, date_created, account_id)
+				VALUES ('private', '$now', $accountID)
 			");
+            if ($response["success"]) {
+                $configurationID = mysqli_insert_id(Core::$db->getDBLink());
+            } else {
+                return array(
+                    "success" => false,
+                    "message" => "There was a problem saving the configuration: " . $response["errorMessage"]
+                );
+            }
+        }
 
-			if ($response["success"]) {
-				$configurationID = mysqli_insert_id(Core::$db->getDBLink());
-				return array(
-					"success" => true,
-					"message" => $configurationID,
-					"lastUpdated" => $nowUnixTime
-				);
-			} else {
-				return array(
-					"success" => false,
-					"message" => "There was a problem saving the configuration: " . $response["errorMessage"]
-				);
-			}
-		} else {
-			$response = Core::$db->query("
-				UPDATE {$prefix}configurations 
-				SET 	last_updated = '$now',
-						configuration_name = '" . $configurationName . "',
-						content = '" . $content . "'
-				WHERE account_id = $accountID AND
-						configuration_id = $configurationID
-			");
+        $response2 = Core::$db->query("
+            INSERT INTO {$prefix}configuration_history (configuration_id, last_updated, configuration_name, content)
+            VALUES ($configurationID, '$now', '" . $configurationName . "', '" . $content . "')
+        ");
+        if ($response2["success"]) {
 
-			if ($response["success"]) {
-				return array(
-					"success" => true,
-					"message" => $configurationID,
-					"lastUpdated" => $nowUnixTime
-				);
-			} else {
-				return array(
-					"success" => false,
-					"message" => "There was a problem saving the configuration: " . $response["errorMessage"]
-				);
-			}
-		}
+            $this->truncateDataSetHistory($configurationID);
+
+            return array(
+                "success" => true,
+                "message" => $configurationID,
+                "lastUpdated" => $nowUnixTime
+            );
+        } else {
+            return array(
+                "success" => false,
+                "message" => "There was a problem saving the configuration: " . $response["errorMessage"]
+            );
+        }
 	}
 
 	public function copyConfiguration($data) {
@@ -384,35 +505,52 @@ class Account {
 
 		$prefix = Core::getDbTablePrefix();
 		$response = Core::$db->query("
-			INSERT INTO {$prefix}configurations (status, date_created, last_updated, account_id, configuration_name, content, num_rows_generated)
-				SELECT status, date_created, last_updated, account_id, configuration_name, content, num_rows_generated
-				FROM {$prefix}configurations
-				WHERE configuration_id = $dataSetId
+			INSERT INTO {$prefix}configurations (status, date_created, account_id, num_rows_generated)
+                SELECT status, date_created, account_id, num_rows_generated
+                FROM {$prefix}configurations
+                WHERE configuration_id = $dataSetId
 		");
 
-		// if it worked okay (it should!) update the last_updated and configuration_name fields
-		if ($response["success"]) {
-			$newConfigurationID = mysqli_insert_id(Core::$db->getDBLink());
-			$now = Utils::getCurrentDatetime();
-			$response2 = Core::$db->query("
-				UPDATE {$prefix}configurations
-				SET configuration_name = '$configurationName',
-					last_updated = '$now'
-				WHERE configuration_id = $newConfigurationID
-			");
+		if (!$response["success"]) {
+            return array(
+                "success" => false,
+                "message" => "There was a problem copying the Data Set: " . $response["errorMessage"]
+            );
+        }
 
-			if ($response2["success"]) {
-				return array(
-					"success" => true,
-					"message" => ""
-				);
-			}
+        // if it worked okay (it should!) update the last_updated and configuration_name fields
+        $newConfigurationID = mysqli_insert_id(Core::$db->getDBLink());
+        $response2 = Core::$db->query("
+            INSERT INTO {$prefix}configuration_history (configuration_id, last_updated, configuration_name, content)
+                SELECT $newConfigurationID as configuration_id, last_updated, configuration_name, content
+                FROM {$prefix}configuration_history
+                WHERE configuration_id = $dataSetId
+        ");
 
-		} else {
-			return array(
-				"success" => false,
-				"message" => "There was a problem copying the Data Set: " . $response["errorMessage"]
-			);
+        $now = Utils::getCurrentDatetime();
+        $response3 = Core::$db->query("
+            UPDATE {$prefix}configurations
+            SET date_created = '$now'
+            WHERE configuration_id = $newConfigurationID
+        ");
+        $response4 = Core::$db->query("
+            UPDATE {$prefix}configuration_history
+            SET configuration_name = '" . $configurationName . "'
+            WHERE configuration_id = $newConfigurationID
+            ORDER BY history_id DESC
+            LIMIT 1
+        ");
+
+        if ($response2["success"] && $response3["success"] && $response4["success"]) {
+            return array(
+                "success" => true,
+                "message" => ""
+            );
+        } else {
+            return array(
+                "success" => false,
+                "message" => "There was a problem copying the Data Set."
+            );
 		}
 	}
 
@@ -487,7 +625,7 @@ class Account {
 
 	public function updateAccount($accountID, $info) {
 		$L = Core::$language->getCurrentLanguageStrings();
-		$dbLink = Core::$db->getDBLink();
+                $dbLink = Core::$db->getDBLink();
 		$accountID = mysqli_real_escape_string($dbLink, $accountID);
 		$prefix = Core::getDbTablePrefix();
 
@@ -605,8 +743,19 @@ class Account {
 		);
 	}
 
+    public function getSelectedDataTypes() {
+        return $this->selectedDataTypes;
+    }
 
-	public function updateRowsGeneratedCount($configurationID, $rowsGenerated) {
+    public function getSelectedExportTypes() {
+        return $this->selectedExportTypes;
+    }
+
+    public function getSelectedCountries() {
+        return $this->selectedCountries;
+    }
+
+    public function updateRowsGeneratedCount($configurationID, $rowsGenerated) {
 		if (!is_numeric($rowsGenerated)) {
 			return;
 		}
@@ -661,7 +810,42 @@ class Account {
 				"message" => "There was a problem saving the configuration: " . $response["errorMessage"]
 			);
 		}
-
 	}
+
+
+    /**
+     * Called after every save. This ensures the size of the history is truncated to whatever value is set (see
+     * the $maxDataSetHistorySize setting in Core.
+     * @param $configurationID
+     */
+    private function truncateDataSetHistory($configurationID) {
+        $prefix = Core::getDbTablePrefix();
+        $maxHistory = Core::getMaxDataSetHistorySize();
+
+        if (empty($maxHistory) || !is_numeric($maxHistory)) {
+            return;
+        }
+
+        // first, get the ID of the oldest saved history item, according to however large this
+        $response = Core::$db->query("
+            SELECT *
+            FROM  {$prefix}configuration_history
+            WHERE configuration_id = $configurationID
+            ORDER BY history_id DESC
+            LIMIT 1
+            OFFSET $maxHistory
+        ");
+
+        if ($response["success"] && !empty($response["results"])) {
+            $results = mysqli_fetch_assoc($response["results"]);
+            $historyID = $results["history_id"];
+
+            Core::$db->query("
+              DELETE FROM {$prefix}configuration_history
+              WHERE configuration_id = $configurationID AND history_id <= $historyID
+            ");
+        }
+    }
+
 }
 

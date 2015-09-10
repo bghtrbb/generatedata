@@ -23,6 +23,7 @@ class Core {
 	private static $maxGeneratedRows = 100000;
 	private static $defaultNumRows = 100;
 	private static $maxDemoModeRows = 100;
+    private static $maxDataSetHistorySize = 200;
 	private static $defaultLanguageFile = "en";
 	private static $defaultExportType = "HTML";
 	private static $defaultCountryPlugins = array();
@@ -34,8 +35,8 @@ class Core {
 	private static $apiEnabled = false;
 
 	// non-overridable settings
-	private static $version = "3.2.0";
-	private static $releaseDate = "2015-01-29";
+	private static $version = "3.2.2";
+	private static $releaseDate = "2015-09-05";
 	private static $minimumPHPVersion = "5.3.0";
 	private static $minimumMySQLVersion = "4.1.3";
 	private static $settingsFileExists = false;
@@ -117,12 +118,20 @@ class Core {
 
 		self::$translations = new Translations();
 
-		// the order is significant in all of this
-		if ($runtimeContext != "installation") {
+        // for all pages
+		if ($runtimeContext == "installation") {
+            session_start();
+            $_SESSION["installing"] = true;
+        } else {
+            // the order is significant in all of this
 			self::initDatabase();
+
 			if (in_array($runtimeContext, array("installationDatabaseReady", "ui",  "generation", "resetPlugins"))) {
 				self::initSessions();
 			}
+            if ($runtimeContext == "installationDatabaseReady") {
+                $_SESSION["installing"] = true;
+            }
 
 			$dbDefaultLanguage = Settings::getSetting("defaultLanguage");
 			if (!empty($dbDefaultLanguage)) {
@@ -184,6 +193,9 @@ class Core {
 			if (isset($maxDemoModeRows)) {
 				self::$maxDemoModeRows = $maxDemoModeRows;
 			}
+            if (isset($maxDataSetHistorySize)) {
+                self::$maxDataSetHistorySize = $maxDataSetHistorySize;
+            }
 			if (isset($defaultLanguageFile)) {
 				self::$defaultLanguageFile = $defaultLanguageFile;
 			}
@@ -300,6 +312,13 @@ class Core {
 		return self::$maxDemoModeRows;
 	}
 
+    /**
+     * @access public
+     */
+    public static function getMaxDataSetHistorySize() {
+        return self::$maxDataSetHistorySize;
+    }
+
 	/**
 	 * @access public
 	 */
@@ -324,10 +343,15 @@ class Core {
 		if (!self::$settingsFileExists) {
 			return false;
 		}
+
+        // attempt to make the connection
+        Core::initDatabase();
+
 		$installationComplete = Settings::getSetting("installationComplete");
 		if (!isset($installationComplete) || $installationComplete == "no") {
 			return false;
 		}
+
 		return true;
 	}
 
@@ -432,7 +456,7 @@ class Core {
 	 * /resources/templates/ - and for other misc uses.
 	 * @access private
 	 */
-	private function initSmarty() {
+	private static function initSmarty() {
 		self::$smarty = new SecureSmarty();
 		self::$smarty->template_dir = realpath(__DIR__ . "/../templates/");
 		self::$smarty->compile_dir  = realpath(__DIR__ . "/../../cache/");
@@ -471,7 +495,9 @@ class Core {
 	}
 
 	/**
-	 * Called by Core::init(), this initializes Core::$dataTypePlugins.
+	 * Called by Core::init(), this initializes Core::$dataTypePlugins. Note that this will contain ALL installed
+     * plugins, not those that are selected by a particular user. In 3.2.2 that feature was added, so use
+     * Account::getDataTypePlugins() instead.
 	 * @access private
 	 */
 	private static function initDataTypes($runtimeContext) {
@@ -520,4 +546,8 @@ class Core {
 			header("Cache-control: private");
 		}
 	}
+
+    public static function isInstalling() {
+        return $_SESSION["installing"];
+    }
 }

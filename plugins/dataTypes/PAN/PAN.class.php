@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @author Ben Keen <ben.keen@gmail.com>, origin code Zeeshan Shaikh <zeeshanyshaikh@gmail.com>
+ * @author Ben Keen <ben.keen@gmail.com>, original code Zeeshan Shaikh <zeeshanyshaikh@gmail.com>
  * @package DataTypes
  */
 class DataType_PAN extends DataTypePlugin {
@@ -188,10 +188,10 @@ class DataType_PAN extends DataTypePlugin {
 
 	public function __construct($runtimeContext) {
 		for ($i=622126; $i<=622925; $i++) {
-			$this->creditCardData["discover"][] = $i;
+            self::$creditCardData["discover"][] = $i;
 		}
 		for ($i=3528; $i<=3589; $i++) {
-			$this->creditCardData["jcb16"][] = $i;
+            self::$creditCardData["jcb16"][] = $i;
 		}
 		parent::__construct($runtimeContext);
 	}
@@ -334,6 +334,7 @@ END;
 	public function getHelpHTML() {
 		$html =<<<EOF
 <p>
+    {$this->L["DATA_TYPE"]["DESC"]}
 	{$this->L["pan_help_intro"]}
 	<b>{$this->L["mastercard"]}</b>, <b>{$this->L["visa"]}</b>, <b>{$this->L["visa_electron"]}</b>,
 	<b>{$this->L["americanexpress"]}</b>, <b>{$this->L["discover"]}</b>, <b>{$this->L["american_diners"]}</b>,

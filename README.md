@@ -24,11 +24,20 @@ Installation is really, really simple. I deliberately wrote the script to be as 
 require additional PHP/Server configuration when setting it up. That said, it *does* require PHP 5.3.0 or later. See 
 the documentation for more info.
 
-## Installation via Vagrant
 
-There's a prepackaged installation available via vagrant [found here](https://github.com/benkeen/generatedata-vagrant),
-courtesy of Daragh Courtney. If you're not familiar with Vagrant, basically it's a package that includes not just the
-generatedata script, but the entire development environment along with it: PHP, MySQL and Apache. Super handy.
+## Pre-packaged solutions
+
+### Docker
+
+- Check out [Maxime Visonneau's repo](https://github.com/mvisonneau/docker-generatedata) for a Docker packaged version 
+of this script.
+- Also: [@LaiNathaniel's repo](https://github.com/LaiNathaniel/docker-generatedata)
+- And [Andy Shinn's instructions](https://github.com/benkeen/generatedata/pull/269)
+
+### Vagrant 
+There's also a pre-packaged Vagrant solution [found here](https://github.com/benkeen/generatedata-vagrant),
+courtesy of Daragh Courtney.
+
 
 # Test Coverage
 
@@ -65,6 +74,15 @@ In addition to the many folks who submit bug reports, a big thanks to the follow
 - [Kent Chenery](https://github.com/kchenery) - MS SQL plugin (3.0.1)
 
 ## Changelog
+
+3.2.2 - Sept, 2015
+- **UNDER DEVELOPMENT**. Focusing on updating the installation process, reset plugins. Allowing custom selection of 
+plugins for each user. 
+
+3.2.1 - May 25, 2015
+- Configuration history option added to store the last 200 (this is configurable) versions of a data set. In case of data
+loss, you can now revert to an older version very simply.
+- Assorted bug fixes, including some improvements to the installation script.
 
 3.2.0 - Jan 29, 2015
 - Adds a new REST API as an alternative way to generate data. See the [API Documentation](http://benkeen.github.io/generatedata/api.html)

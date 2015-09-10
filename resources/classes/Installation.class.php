@@ -7,8 +7,6 @@
  * @package Core
  */
 class Installation {
-	private $databaseCreationError = false;
-
 
 	public static function createSettingsFile($dbHostname, $dbName, $dbUsername, $dbPassword, $tablePrefix) {
 		$encryptionSalt = Utils::generateRandomAlphanumericStr("DDD");
@@ -16,7 +14,7 @@ class Installation {
 		$dbPassword = Utils::sanitize($dbPassword);
 		$tablePrefix = Utils::sanitize($tablePrefix);
 
-		$content =<<< END
+		$content =<<<END
 <?php
 
 \$dbHostname     = '$dbHostname';
@@ -28,14 +26,24 @@ class Installation {
 END;
 
 		$file = __DIR__ . "/../../settings.php";
-		$handle = @fopen($file, "w");
+		$handle = @fopen($file, "w+");
 		if ($handle) {
 			fwrite($handle, $content);
 			fclose($handle);
-			return array(true, "");
 		}
 
-		// no such luck! we couldn't create the file on the server. The user will need to do it manually
+        // now check the file exists, and if it DOES, contains the right stuff
+        if (is_readable($file)) {
+            $result = self::validateSettingsFile($file);
+            if ($result["success"]) {
+                return array(true, "");
+            } else {
+                return array(false, $result["error"]);
+            }
+        }
+
+        // no such luck! we couldn't create the file on the server. The user will need to do it manually. Return
+        // the
 		return array(false, $content);
 	}
 
@@ -46,7 +54,8 @@ END;
 		if ($response["success"] == 1) {
 			return array(true, "");
 		} else {
-			return array(false, "There was a problem creating the Core tables. Please report this problem.");
+			return array(false, "There was a problem creating the Core tables. Please report this problem. Details: " .
+                $response["errorMessage"]);
 		}
 	}
 
@@ -60,9 +69,8 @@ END;
 		$rollbackQueries = array(
 			"DROP TABLE IF EXISTS {$prefix}cities",
 			"DROP TABLE IF EXISTS {$prefix}configurations",
+            "DROP TABLE IF EXISTS {$prefix}configuration_history",
 			"DROP TABLE IF EXISTS {$prefix}countries",
-			"DROP TABLE IF EXISTS {$prefix}first_names",
-			"DROP TABLE IF EXISTS {$prefix}last_names",
 			"DROP TABLE IF EXISTS {$prefix}regions",
 			"DROP TABLE IF EXISTS {$prefix}sessions",
 			"DROP TABLE IF EXISTS {$prefix}settings",
@@ -89,13 +97,20 @@ END;
 				configuration_id mediumint(9) NOT NULL auto_increment,
 				status ENUM('public','private') NOT NULL,
 				date_created datetime NOT NULL,
-				last_updated datetime NOT NULL,
 				account_id mediumint(9) NOT NULL,
-				configuration_name varchar(100) NOT NULL,
-				content mediumtext NOT NULL,
 				num_rows_generated MEDIUMINT DEFAULT 0,
 				PRIMARY KEY (configuration_id)
 			)
+		";
+        $queries[] = "
+			CREATE TABLE {$prefix}configuration_history (
+				history_id mediumint(9) NOT NULL auto_increment,
+                configuration_id mediumint(9) NOT NULL,
+				last_updated datetime NOT NULL,
+				configuration_name varchar(100) NOT NULL,
+				content TEXT NOT NULL,
+                PRIMARY KEY (history_id)
+            )
 		";
 		$queries[] = "
 			CREATE TABLE {$prefix}countries (
@@ -123,6 +138,14 @@ END;
 				UNIQUE KEY setting_name (setting_name)
 			)
 		";
+        $queries[] = "
+			CREATE TABLE {$prefix}sessions (
+				session_id varchar(100) NOT NULL default '',
+				session_data text NOT NULL,
+				expires int(11) NOT NULL default '0',
+				PRIMARY KEY (session_id)
+			)
+		";
 		$defaultTheme = Core::getDefaultTheme();
 		$queries[] = "
 			INSERT INTO {$prefix}settings (setting_name, setting_value)
@@ -146,15 +169,6 @@ END;
 				('theme', '$defaultTheme')
 		";
 		$queries[] = "
-			CREATE TABLE {$prefix}sessions (
-				session_id varchar(100) NOT NULL default '',
-				session_data text NOT NULL,
-				expires int(11) NOT NULL default '0',
-				PRIMARY KEY (session_id)
-			)
-		";
-
-		$queries[] = "
 			CREATE TABLE {$prefix}user_accounts (
 				account_id mediumint(8) unsigned NOT NULL auto_increment,
 				date_created datetime NOT NULL,
@@ -170,10 +184,46 @@ END;
 				password_recovery_answer varchar(100) default NULL,
 				num_rows_generated mediumint(9) default 0,
 				max_records mediumint(9) default NULL,
+				selected_data_types TEXT NULL,
+				selected_export_types TEXT NULL,
+				selected_countries TEXT NULL,
 				PRIMARY KEY (account_id)
 			)
 		";
 
 		return Core::$db->query($queries, $rollbackQueries);
 	}
+
+    public static function validateSettingsFile() {
+        $file = file(__DIR__ . "/../../settings.php");
+        $found = array(
+            "dbHostname"    => false,
+            "dbName"        => false,
+            "dbUsername"    => false,
+            "dbPassword"    => false,
+            "dbTablePrefix" => false
+        );
+
+        foreach ($file as $line) {
+            foreach ($found as $key => $value) {
+                preg_match("/$key/", $line, $matches);
+                if ($matches) {
+                    $found[$key] = true;
+                }
+            }
+        }
+
+        $allMatched = true;
+        foreach ($found as $key => $value) {
+            if (!$value) {
+                $allMatched = false;
+                break;
+            }
+        }
+
+        return array(
+            "success" => $allMatched,
+            "error" => "The settings file exists but doesn't contain all the required values. You'll need to remove the file and re-install the script."
+        );
+    }
 }

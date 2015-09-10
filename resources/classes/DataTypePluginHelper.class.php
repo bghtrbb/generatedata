@@ -13,7 +13,7 @@ class DataTypePluginHelper {
 	 *
 	 * @return array
 	 */
-	public function getDataTypeResources() {
+	public static function getDataTypeResources() {
 		$dataTypeGroups = Core::$dataTypePlugins;
 		$resources = array();
 		while (list($group, $dataTypes) = each($dataTypeGroups)) {
@@ -135,7 +135,7 @@ class DataTypePluginHelper {
 	}
 
 	/**
-	 * Returns an array of available, grouped, instantiated Data Type objects.
+	 * Returns an array of all available, grouped, instantiated Data Type objects.
 	 * @param string
 	 * @param boolean
 	 * @return array
@@ -158,8 +158,8 @@ class DataTypePluginHelper {
 					continue;
 				}
 				if (is_dir("$dataTypesFolder/$item")) {
-					$obj = self::instantiateDataType($runtimeContext, $dataTypesFolder, $item);
-					if ($obj != null && $obj !== false) {
+        			$obj = self::instantiateDataType($runtimeContext, $dataTypesFolder, $item);
+        			if ($obj != null && $obj !== false) {
 						$folders = explode(DIRECTORY_SEPARATOR, $dataTypesFolder . DIRECTORY_SEPARATOR . $item);
 						$folders = array_reverse($folders);
 
@@ -221,15 +221,15 @@ class DataTypePluginHelper {
 	 * @internal param $string
 	 * @return object
 	 */
-	private function instantiateDataType($runtimeContext, $baseFolder, $dataTypeFolderName) {
-		$dataTypeClassFileName = "{$dataTypeFolderName}.class.php";
-		if (!is_file("$baseFolder/$dataTypeFolderName/$dataTypeClassFileName")) {
+	private static function instantiateDataType($runtimeContext, $baseFolder, $dataTypeFolderName) {
+		$dataTypeClass = "{$dataTypeFolderName}.class.php";
+		if (!is_file("$baseFolder/$dataTypeFolderName/$dataTypeClass")) {
 			return false;
 		}
 
 		// now try to include and instantiate the class [bug...]
 		try {
-			include("$baseFolder/$dataTypeFolderName/$dataTypeClassFileName");
+			include("$baseFolder/$dataTypeFolderName/$dataTypeClass");
 		} catch (Exception $e) {
 			return false;
 		}
@@ -243,7 +243,6 @@ class DataTypePluginHelper {
 		try {
 			$instance = new $className($runtimeContext);
 		} catch (Exception $e) {
-
 			return false;
 		}
 
